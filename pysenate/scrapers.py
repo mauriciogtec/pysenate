@@ -1,3 +1,8 @@
+# Libraries ===========
+
+# system utils
+import time
+
 # Scraping & text processing
 import requests
 from bs4 import BeautifulSoup
@@ -12,12 +17,29 @@ import datetime as dt
 from calendar import month_abbr
 import re
 
+# Globals and URL construction =====
 def httpheaders():
     return {'User-Agent': 'Mozilla/5.0'}
 
-def rollcall(url: str):
+def rollcallurl(congress, session, vote_number):
+    return 'https://www.senate.gov/legislative/LIS/roll_call_votes/vote{}{}/vote_{}_{}_{:05d}.xml'.\
+                format(congress, session, congress, session, vote_number)
+
+def sessionurl(congress, year):
+    return 'https://www.senate.gov/legislative/LIS/roll_call_lists/vote_menu_{}_{}.xml'.format(congress, session)    
+
+# Extractors ========
+def rollcall_details(
+    congress:int = None,
+    session:int = None,
+    vote_number:int = None,
+    url:str = None,
+    save:bool = False):
     # validate input
-    assert url[-4:] == '.xml', "please provide url of .xml of session details"
+    assert url is None or url[-4:] == '.xml', "please provide url of .xml of session details"
+    assert url != None or (congress != None and session != None and vote_number != None), "if url is not provide, must provide congress, session and vote number"
+    if url == None:
+        url = rollcallurl(congress, session, vote_number)
 
     try:
         xml = requests.get(url, headers = httpheaders()).content
@@ -49,12 +71,30 @@ def rollcall(url: str):
 
     df = pd.DataFrame({'senator': senator, 'party': party, 'state': state, 'vote': vote, 'lis_member_id': lis_member_id})
 
+    # save to data/
+    if save:
+        fn = "./data/rollcalls/{}.csv".format(url[-20:-4])
+        print("Found option save=True, saving a copy to", fn)
+        try:
+            df.to_csv(fn, index=False)
+        except PermissionError as e:
+            print('Unable to save, check project folder permissions')
+        except FileNotFoundError:
+            print('Could not find folder .data/. Are you in project folder? Run pysenate.projectinit() first')
+
     return df
 
 
-def session_details(url:str, save:bool=False):
+def session_details(
+    congress:int = None,
+    session:int = None,
+    url:str = None, 
+    save:bool = False):
     # validate input
-    assert url[-4:] == '.xml', "please provide url of .xml of session details"
+    assert url == None or url[-4:] == '.xml', "please provide url of .xml of session details"
+    assert url != None or (congress != None and session != None), "if url is not provide, must provide congress and session"
+    if url == None:
+        url = sessionurl(congress, session)
 
     # read and parse detailed information
     try:
@@ -105,18 +145,31 @@ def session_details(url:str, save:bool=False):
         date = dt.date(year, vote_month, vote_day)
 
         # add url to additional vote information
-        url = baseurl + '{}.xml'.format(vote_number_str)
+        linkurl = baseurl + '{}.xml'.format(vote_number_str)
 
         # let's put it together in data frame
-        row_data = [vote_number, title, yeas, nays, result, issue, question, date, url]
+        row_data = [vote_number, title, yeas, nays, result, issue, question, date, linkurl]
         rows.append(pd.DataFrame([row_data], columns=colnames))      
         
     # ensemble in dataset
     df = pd.concat(rows, ignore_index=True)
 
+    # save to data/
+    if save:
+        fn = "./data/{}.csv".format(url[-19:-4])
+        print("Found option save=True, saving a copy to ", fn)
+        try:
+            df.to_csv(fn, index=False)
+        except PermissionError as e:
+            print('Unable to save, check project folder permissions')
+        except FileNotFoundError:
+            print('Could not find folder .data/. Are you in project folder? Run pysenate.projectinit() first')
+
+
     return df
 
-def urls_to_sessions(save:bool = True):
+def list_sessions(save:bool = False):
+    #
     domain = 'https://www.senate.gov'
     url = domain + '/legislative/votes.htm'
 
@@ -155,18 +208,62 @@ def urls_to_sessions(save:bool = True):
     
     xml = [re.sub('.htm', '.xml', x) for x in url]
 
-    tbl = pd.DataFrame({'year': year, 'congress': congress, 'session': session,
-        'label': text, 'xml': xml})
+    df = pd.DataFrame({'year': year, 'congress': congress, 'session': session,
+        'label': text, 'url': xml})
 
     # save to data/
     if save:
-        print("Found option save=True (default), saving a copy to ./data/sessionurls.csv")
+        print("Found option save=True, saving a copy to ./data/session_list.csv")
         try:
-            tbl.to_csv('./data/sessionurls.csv', index=False)
+            df.to_csv('./data/session_list.csv', index=False)
         except PermissionError as e:
             print('Unable to save, check project folder permissions')
         except FileNotFoundError:
             print('Could not find folder .data/. Are you in project folder? Run pysenate.projectinit() first')
 
-    return tbl
+    return df
+
+# Batch extraction ===============
+
+def rollcall_batch(
+    congress:int, 
+    session:int, 
+    fmt:str='dict', 
+    save:bool=False, 
+    verbose:bool=True):
+    # validate input
+    assert fmt in ['dict', 'concat'], 'valid formats are "dict" and "concat"'
+
+    # obtain list of all available sessions
+    rollcall_numbers = list(session_details(congress, session).vote_number)
+
+    # extract detail for each rollcall
+    rollcall_results = []
+    for rollcall in rollcall_numbers:
+        result = rollcall_details(
+            congress=congress, 
+            session=session, 
+            vote_number=rollcall, 
+            save=save)
+        result.insert(0, 'vote_number', [rollcall] * result.shape[0])
+
+        # Good citizenship: wait 2 seconds
+        print("Finished vote {}, pausing 2 sec...".format(rollcall))
+        time.sleep(2.0)
+        rollcall_results.append(result)
+
+    # Create output according to fmt
+    df = pd.concat(rollcall_results)
+    if fmt == 'dict':
+        output = {v.vote_number[1]: v for v in rollcall_results}
+    elif fmt == 'concat':
+        output = df
+
+    if save:
+        fn = "./data/batch_data/rollcall_batch_{}_{}.csv".format(congress, session)
+        print("Found option save=True, saving a copy to", fn)
+        df = pd.concat(rollcall_results)
+        df.to_csv(fn)
+
+    return df
 
