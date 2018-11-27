@@ -20,7 +20,7 @@ def projectinit(
     # check if data folders exist
     datapath = path + '/data'
     rollcallpath = path + '/data/rollcalls'
-    batchpath = path + '/data/batch_data'
+    batchpath = path + '/data/batch'
     if not exists(path):
         mkdir(path)
     if not exists(datapath):

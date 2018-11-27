@@ -25,6 +25,8 @@ This will create the following project structure
 config.yml
 data/
     rollcalls/
+    batch/
+    auto/
 ```
 
 ## Basic extraction
