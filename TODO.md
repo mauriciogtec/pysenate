@@ -1,0 +1,1 @@
+- **Offline mode.** Add an `offline:bool=True` option to extraction functions, so that they look-up for data locally. It should be straightforward, as functions already have a save option with strategic paths.
