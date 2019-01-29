@@ -2,6 +2,7 @@
 
 # system utils
 import time
+from datetime import date
 
 # Scraping & text processing
 import requests
@@ -21,15 +22,18 @@ import re
 def httpheaders():
     return {'User-Agent': 'Mozilla/5.0'}
 
+def domain():
+    return 'https://www.senate.gov/'
+
 def sessionlisturl():
-    return 'https://www.senate.gov/legislative/votes.htm'
+    return domain() + '/legislative/votes.htm'
 
 def rollcallurl(congress, session, vote_number):
-    return 'https://www.senate.gov/legislative/LIS/roll_call_votes/vote{}{}/vote_{}_{}_{:05d}.xml'.\
+    return domain() + 'legislative/LIS/roll_call_votes/vote{}{}/vote_{}_{}_{:05d}.xml'.\
                 format(congress, session, congress, session, vote_number)
 
 def sessionurl(congress, session):
-    return 'https://www.senate.gov/legislative/LIS/roll_call_lists/vote_menu_{}_{}.xml'.format(congress, session)
+    return domain() + 'legislative/LIS/roll_call_lists/vote_menu_{}_{}.xml'.format(congress, session)
 
 # Request and parse ===================
 def read_soup(url, parser):
@@ -200,7 +204,7 @@ def list_sessions(save=False):
         session.append(int(s))
         year.append(int(y))
         text.append(x.text)
-        url.append(domain + x['href'])
+        url.append(domain() + x['href'])
     
     xml = [re.sub('.htm', '.xml', x) for x in url]
 
@@ -221,22 +225,36 @@ def list_sessions(save=False):
 
 # Batch extraction ===============
 
-def rollcall_batch(congress, session, fmt='dict', save=False, verbose=True):
+def rollcall_batch(
+    congress: int, 
+    session: int, 
+    fmt: str = 'dict',
+    save: bool = False,
+    verbose:bool = False, 
+    min_vote_date: date = date(1900, 1, 1)):
+
     # validate input
     assert fmt in ['dict', 'concat'], 'valid formats are "dict" and "concat"'
-
+    assert min_vote_date
     # obtain list of all available sessions
-    rollcall_numbers = list(session_details(congress, session).vote_number)
+    sessdetails = session_details(congress, session)
+    if sessdetails.shape[0] == 0:
+        return
 
     # extract detail for each rollcall
     rollcall_results = []
-    for rollcall in rollcall_numbers:
+    for rollcall, d in zip(sessdetails.vote_number.values, sessdetails.vote_date.values):
+        # this is useful
+        if d < min_vote_date:
+            continue
+
         result = rollcall_details(
             congress=congress, 
             session=session, 
             vote_number=rollcall, 
             save=save)
         result.insert(0, 'vote_number', [rollcall] * result.shape[0])
+        result.insert(0, 'date', [d] * result.shape[0])
 
         # Good citizenship: wait 2 seconds
         print("Finished vote {}, pausing 2 sec...".format(rollcall))
@@ -258,5 +276,25 @@ def rollcall_batch(congress, session, fmt='dict', save=False, verbose=True):
 
     return df
 
+
 ### Autoupdate
+
+def fetch_all_since(d: date):
+    assert isinstance(d, date)
+    sesslist = list_sessions()
+    sesslist = sesslist[sesslist.year >= d.year]
+    
+    # exit program if empty
+    n = sesslist.shape[0]
+    if n == 0:
+        return
+
+    # now bring all
+    dfs = [rollcall_batch(sesslist.congress[i], sesslist.session[i], min_vote_date=d) for i in range(n)]
+    
+    return pd.concat(dfs)
+    
+    
+
+
 

@@ -1,7 +1,10 @@
 from setuptools import setup
 
 packages = ['pysenate']
-install_requires = ['beautifulsoup4>=4.6.0']
+install_requires = [
+    'beautifulsoup4>=4.6.0', 
+    'pandas>=0.21.1'
+]
 
 if __name__ == "__main__":
     setup(
