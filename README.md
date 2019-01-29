@@ -33,7 +33,6 @@ data/
 
 ### 1. Extract list and urls of available sessions
 
-For this, run the command
 
 ```python
 tbl = sen.list_sessions(save=True)
@@ -79,7 +78,7 @@ vote_number         title   yeas  nays result     issue         question  vote_d
 4  240  Motion to Invo...    93     5  Agreed    S. 140   On the Cloture 2018-11-13  https://...
 ```
 
-Alternatively, we can provide the url directly
+Alternatively, we can directly provide the url
 
 ```python
 url = 'https://www.senate.gov/legislative/LIS/roll_call_lists/vote_menu_115_2.xml'

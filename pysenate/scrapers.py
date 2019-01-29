@@ -17,43 +17,64 @@ import datetime as dt
 from calendar import month_abbr
 import re
 
-# Globals and URL construction =====
+# Global variables and URL construction =====
 def httpheaders():
     return {'User-Agent': 'Mozilla/5.0'}
+
+def sessionlisturl():
+    return 'https://www.senate.gov/legislative/votes.htm'
 
 def rollcallurl(congress, session, vote_number):
     return 'https://www.senate.gov/legislative/LIS/roll_call_votes/vote{}{}/vote_{}_{}_{:05d}.xml'.\
                 format(congress, session, congress, session, vote_number)
 
-def sessionurl(congress, year):
-    return 'https://www.senate.gov/legislative/LIS/roll_call_lists/vote_menu_{}_{}.xml'.format(congress, session)    
+def sessionurl(congress, session):
+    return 'https://www.senate.gov/legislative/LIS/roll_call_lists/vote_menu_{}_{}.xml'.format(congress, session)
 
-# Extractors ========
+# Request and parse ===================
+def read_soup(url, parser):
+    try:
+        req = requests.get(url, headers = httpheaders()).content
+        if len(req) == 0:
+            raise ValueError
+        bs = BeautifulSoup(req, parser)
+        return bs
+    except ValueError:
+        print("connection established but content is null")
+        return None
+    except AttributeError:
+        print('Error while trying to parse xml with beautiful soup')
+        return None
+    except Exception as e:
+        print(e)
+        return None
+
+def latest_available():
+    """
+    returns: the most recent vote information available.
+    description: it's meant to be useful for querying if the currently stored data is up-to-date
+    """
+    url = 'https://www.senate.gov/legislative/votes.htm'
+    bs = read_soup(url, 'html.parser')
+    return
+
+
+# Process information =============
 def rollcall_details(
-    congress:int = None,
-    session:int = None,
-    vote_number:int = None,
-    url:str = None,
-    save:bool = False):
+    congress=None, 
+    session=None, 
+    vote_number=None, 
+    url=None, 
+    save=False):
     # validate input
     assert url is None or url[-4:] == '.xml', "please provide url of .xml of session details"
     assert url != None or (congress != None and session != None and vote_number != None), "if url is not provide, must provide congress, session and vote number"
     if url == None:
         url = rollcallurl(congress, session, vote_number)
 
-    try:
-        xml = requests.get(url, headers = httpheaders()).content
-        if len(xml) == 0:
-            raise ValueError('connection established but read null content')
-        bs = BeautifulSoup(xml, 'xml')
-    except HTTPError as e:
-        print(e, 'Could not establish connection')
-        return None
-    except ValueError as e:
-        print(e, 'Connection established but received empty response')
-        return None 
-    except AttributeError as e:
-        print(e, 'Error while trying to parse xml with beautiful soup')
+    # obtain parsed xml
+    bs = read_soup(url, 'xml')
+    if bs == None:
         return None
 
     senator = []
@@ -86,32 +107,22 @@ def rollcall_details(
 
 
 def session_details(
-    congress:int = None,
-    session:int = None,
-    url:str = None, 
-    save:bool = False):
+    congress=None, 
+    session=None, 
+    url=None, 
+    save=False):
     # validate input
     assert url == None or url[-4:] == '.xml', "please provide url of .xml of session details"
     assert url != None or (congress != None and session != None), "if url is not provide, must provide congress and session"
     if url == None:
         url = sessionurl(congress, session)
 
-    # read and parse detailed information
-    try:
-        xml = requests.get(url, headers = httpheaders()).content
-        if len(xml) == 0:
-            raise ValueError('connection established but read null content')
-        bs = BeautifulSoup(xml, 'xml')
-    except HTTPError as e:
-        print(e, 'Could not establish connection')
+    # obtain parsed xml
+    bs = read_soup(url, 'xml')
+    if bs == None:
         return None
-    except ValueError as e:
-        print(e, 'Connection established but received empty response')
-        return None 
-    except AttributeError as e:
-        print(e, 'Error while trying to parse xml with beautiful soup')
-        return None
-    
+
+    # process detailed information
     congress = int(bs.congress.text)
     session = int(bs.session.text)
     year = int(bs.congress_year.text)
@@ -168,27 +179,12 @@ def session_details(
 
     return df
 
-def list_sessions(save:bool = False):
-    #
-    domain = 'https://www.senate.gov'
-    url = domain + '/legislative/votes.htm'
-
+def list_sessions(save=False):
     # read html or catch error
-    try:
-        html = requests.get(url, headers =  httpheaders()).content
-        if len(html) == 0:
-            raise ValueError
-        bs = BeautifulSoup(html, 'html.parser')
-    except HTTPError as e:
-        print('Could not establish connection, check connection and try again...')
+    bs = read_soup(sessionlisturl(), 'html.parser')
+    if bs == None:
         return None
-    except ValueError as e:
-        print('HTTP response empty, check connection and try again; if error persists, please submit an issue...')
-        return None 
-    except AttributeError as e:
-        print(e, 'Error with beautiful soup html parser; please submit an issue')
-        return None
-    
+     
     # extract links and create table
     # must be a vote menu and text start with a year (as opposed to some text being detailed sessions)
     atags = bs.find_all("a", href=re.compile('vote_menu'), text=re.compile("^\d{4} "))
@@ -225,12 +221,7 @@ def list_sessions(save:bool = False):
 
 # Batch extraction ===============
 
-def rollcall_batch(
-    congress:int, 
-    session:int, 
-    fmt:str='dict', 
-    save:bool=False, 
-    verbose:bool=True):
+def rollcall_batch(congress, session, fmt='dict', save=False, verbose=True):
     # validate input
     assert fmt in ['dict', 'concat'], 'valid formats are "dict" and "concat"'
 
@@ -266,4 +257,6 @@ def rollcall_batch(
         df.to_csv(fn)
 
     return df
+
+### Autoupdate
 
