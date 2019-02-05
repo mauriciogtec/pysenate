@@ -65,11 +65,12 @@ def latest_available():
 
 # Process information =============
 def rollcall_details(
-    congress=None, 
-    session=None, 
-    vote_number=None, 
-    url=None, 
-    save=False):
+        congress=None, 
+        session=None, 
+        vote_number=None, 
+        url=None, 
+        save=False,
+        path="."):
     # validate input
     assert url is None or url[-4:] == '.xml', "please provide url of .xml of session details"
     assert url != None or (congress != None and session != None and vote_number != None), "if url is not provide, must provide congress, session and vote number"
@@ -98,14 +99,14 @@ def rollcall_details(
 
     # save to data/
     if save:
-        fn = "./data/rollcalls/{}.csv".format(url[-20:-4])
+        fn = "{}/data/rollcalls/{}.csv".format(path, url[-20:-4])
         print("Found option save=True, saving a copy to", fn)
         try:
             df.to_csv(fn, index=False)
         except PermissionError as e:
             print('Unable to save, check project folder permissions')
         except FileNotFoundError:
-            print('Could not find folder .data/. Are you in project folder? Run pysenate.projectinit() first')
+            print('Could not find ' + path + '/data/. Are you in project folder? Run pysenate.projectinit() first')
 
     return df
 
@@ -114,7 +115,8 @@ def session_details(
     congress=None, 
     session=None, 
     url=None, 
-    save=False):
+    save=False,
+    path="."):
     # validate input
     assert url == None or url[-4:] == '.xml', "please provide url of .xml of session details"
     assert url != None or (congress != None and session != None), "if url is not provide, must provide congress and session"
@@ -171,19 +173,19 @@ def session_details(
 
     # save to data/
     if save:
-        fn = "./data/{}.csv".format(url[-19:-4])
+        fn = "{}/data/{}.csv".format(path, url[-19:-4])
         print("Found option save=True, saving a copy to ", fn)
         try:
             df.to_csv(fn, index=False)
         except PermissionError as e:
             print('Unable to save, check project folder permissions')
         except FileNotFoundError:
-            print('Could not find folder .data/. Are you in project folder? Run pysenate.projectinit() first')
+            print('Could not find ' + fn + 'Are you in project folder? Run pysenate.projectinit() first')
 
 
     return df
 
-def list_sessions(save=False):
+def list_sessions(save=False, path="."):
     # read html or catch error
     bs = read_soup(sessionlisturl(), 'html.parser')
     if bs == None:
@@ -213,13 +215,13 @@ def list_sessions(save=False):
 
     # save to data/
     if save:
-        print("Found option save=True, saving a copy to ./data/session_list.csv")
+        print("Found option save=True, saving a copy to <path>/data/session_list.csv")
         try:
-            df.to_csv('./data/session_list.csv', index=False)
+            df.to_csv(path + '/data/session_list.csv', index=False)
         except PermissionError as e:
             print('Unable to save, check project folder permissions')
         except FileNotFoundError:
-            print('Could not find folder .data/. Are you in project folder? Run pysenate.projectinit() first')
+            print('Could not find ' + path + '. Are you in project folder? Run pysenate.projectinit() first')
 
     return df
 
@@ -230,6 +232,7 @@ def rollcall_batch(
     session: int, 
     fmt: str = 'dict',
     save: bool = False,
+    path: str = ".",
     verbose:bool = False, 
     min_vote_date: date = date(1900, 1, 1)):
 
@@ -252,7 +255,8 @@ def rollcall_batch(
             congress=congress, 
             session=session, 
             vote_number=rollcall, 
-            save=save)
+            save=save,
+            path=path)
         result.insert(0, 'vote_number', [rollcall] * result.shape[0])
         result.insert(0, 'date', [d] * result.shape[0])
 
@@ -269,7 +273,7 @@ def rollcall_batch(
         output = df
 
     if save:
-        fn = "./data/batch_data/rollcall_batch_{}_{}.csv".format(congress, session)
+        fn = "{}/data/batch_data/rollcall_batch_{}_{}.csv".format(path, congress, session)
         print("Found option save=True, saving a copy to", fn)
         df = pd.concat(rollcall_results)
         df.to_csv(fn)
@@ -279,9 +283,9 @@ def rollcall_batch(
 
 ### Autoupdate
 
-def fetch_all_since(d: date):
+def fetch_all_since(d: date, save: bool = False, path="."):
     assert isinstance(d, date)
-    sesslist = list_sessions()
+    sesslist = list_sessions(path=path)
     sesslist = sesslist[sesslist.year >= d.year]
     
     # exit program if empty
@@ -290,7 +294,12 @@ def fetch_all_since(d: date):
         return
 
     # now bring all
-    dfs = [rollcall_batch(sesslist.congress[i], sesslist.session[i], min_vote_date=d) for i in range(n)]
+    dfs = [rollcall_batch(
+        sesslist.congress[i], 
+        sesslist.session[i], 
+        min_vote_date=d,
+        save=save,
+        path=path) for i in range(n)]
     
     return pd.concat(dfs)
     

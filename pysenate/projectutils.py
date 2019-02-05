@@ -1,6 +1,9 @@
 from os import mkdir
 from os.path import exists
 from typing import List
+from pysenate.scrapers import fetch_all_since
+from datetime import date
+import yaml
 
 def projectinit(
     path: str='.', 
@@ -17,6 +20,10 @@ def projectinit(
     # validate input
     assert all([int(y) in range(1985, 2030) for y in years])
 
+    # standardise path
+    if path[-1] == '/':
+        path = path[:-1]
+
     # check if data folders exist
     datapath = path + '/data'
     rollcallpath = path + '/data/rollcalls'
@@ -31,10 +38,28 @@ def projectinit(
         mkdir(batchpath)
 
     # create config file
-    configyml = "years: {}\nlastupdate: {}\n".format(years, None)
-    fn = path + "/config.yml"
+    configyml = {'years': years, 'path': path, 'lastupdate': date(min(years), 1, 1)}
+    fn = path + "/config.yaml"
     with open(fn, 'w') as file:
-        file.write(configyml)
+        yaml.dump(configyml, file)
 
-    return 0
-    
+def update_data(configpath='config.yaml'):
+    try:
+        with open(configpath, 'r') as file:
+            config = yaml.load(file)
+    except FileNotFoundError as e:
+        print("please provide project config file path or run pysenate.projectinit() first")
+    finally: 
+        lastupdate = config['lastupdate']
+        savepath = config['path']
+        fetch_all_since(lastupdate, path=savepath, save=True)
+        config['lastupdate'] = str(date.today())
+        with open(configpath, 'w') as file:
+            yaml.dump(config, file)
+
+
+path = 'tests'
+configpath = 'tests/config.yaml'
+
+# import pysenate as pysen
+# pysen.update_data(configpath)

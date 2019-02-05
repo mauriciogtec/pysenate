@@ -7,5 +7,7 @@
         "latex",
         "plaintext",
         "python"
-    ]
+    ],
+    "python.pythonPath": "C:\\Users\\mbtec\\Anaconda3\\python.exe",
+    "python.linting.pylintEnabled": false
 }
