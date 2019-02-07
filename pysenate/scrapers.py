@@ -35,6 +35,10 @@ def rollcallurl(congress, session, vote_number):
 def sessionurl(congress, session):
     return domain() + 'legislative/LIS/roll_call_lists/vote_menu_{}_{}.xml'.format(congress, session)
 
+def billinfourl(congress, number, what):
+    assert what in ['senate-bill', 'senate-resolution', 'house-concurrent-resolution']
+    return 'https://www.congress.gov/bill/{}th-congress/{}/{}/all-info'.format(congress, what, number)
+
 # Request and parse ===================
 def read_soup(url, parser):
     try:
@@ -255,7 +259,7 @@ def rollcall_batch(
             congress=congress, 
             session=session, 
             vote_number=rollcall, 
-            save=save,
+            save=False,
             path=path)
         result.insert(0, 'vote_number', [rollcall] * result.shape[0])
         result.insert(0, 'date', [d] * result.shape[0])
@@ -276,7 +280,7 @@ def rollcall_batch(
         fn = "{}/data/batch_data/rollcall_batch_{}_{}.csv".format(path, congress, session)
         print("Found option save=True, saving a copy to", fn)
         df = pd.concat(rollcall_results)
-        df.to_csv(fn)
+        df.to_csv(fn, index=False)
 
     return df
 
@@ -304,6 +308,56 @@ def fetch_all_since(d: date, save: bool = False, path="."):
     return pd.concat(dfs)
     
     
+# --- This one takes a long time but get all we need # --------------
 
+def billinfo(congress, number, what):
+    url = billinfourl(congress, number, what)
+    bs = read_soup(url, 'html.parser')
+
+    bill = 'S.{}'.format(number) 
+
+    # TO-DO!: obtain ALL titles not just one
+    title = bs.find(class_='titles-row').p.text.strip()
+
+    # overview table (sponsor, committee, latest)
+    overview = bs.find(class_='overview').table
+    overviewvals = list(overview.find_all('td'))
+    sponsorinfo = overviewvals[0].text.strip()
+    committee = overviewvals[1].text.strip()
+    latestaction = overviewvals[2].text.strip()
+
+    # parse the sponsor info form above
+    r = 'Sen\.[ ]+(.+) \[(\w+)-(\w{2})'
+    rematch = re.search(r, sponsorinfo)
+    sponsor, party, state = [rematch.group(i) for i in range(1, 4)]
+
+    # now tracker information
+    tracker_banner = bs.find(class_='selected last').contents[0]
+    all_actions =  bs.find(id='allActions-content').table
+    all_actions_str = ''
+    rows = all_actions.tbody.find_all('tr')
+    for i, row in enumerate(rows):
+        d, c, a = list(row.find_all('td'))
+        all_actions_str += '{}\t{}\t{}'.format(d.text, c.text, a.text)
+        if i < len(rows) - 1:
+            all_actions_str += '\n'
+
+    # cosponsors
+    cosponsorsinfo = bs.find(id='cosponsors-content')
+    entries = cosponsorsinfo.tbody.find_all('td', class_='actions')
+    cosponsors = []
+    for d in entries:
+        r = '\\nSen\. (.+) \[.*'
+        rematch = re.search(r, d.text)
+        c = rematch.group(1)
+        cosponsors.append(c)
+
+    return bill, title, sponsor, party, state, all_actions_str, cosponsors
+
+# restring = '(S.\d+).*- (.*)\.(\d+th.*)'
+# header = bs.h1.text
+# reparse = re.search(restring, header)
+# bill, title = reparse.group(1), reparse.group(2)
+# table = bs.find(class_='overview').
 
 

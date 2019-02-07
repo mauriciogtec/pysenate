@@ -27,7 +27,7 @@ def projectinit(
     # check if data folders exist
     datapath = path + '/data'
     rollcallpath = path + '/data/rollcalls'
-    batchpath = path + '/data/batch'
+    batchpath = path + '/data/batch_data'
     if not exists(path):
         mkdir(path)
     if not exists(datapath):
@@ -53,7 +53,7 @@ def update_data(configpath='config.yaml'):
         lastupdate = config['lastupdate']
         savepath = config['path']
         fetch_all_since(lastupdate, path=savepath, save=True)
-        config['lastupdate'] = str(date.today())
+        config['lastupdate'] = date.today()
         with open(configpath, 'w') as file:
             yaml.dump(config, file)
 
@@ -61,5 +61,5 @@ def update_data(configpath='config.yaml'):
 path = 'tests'
 configpath = 'tests/config.yaml'
 
-# import pysenate as pysen
-# pysen.update_data(configpath)
+import pysenate as pysen
+pysen.update_data(configpath)
