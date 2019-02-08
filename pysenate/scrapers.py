@@ -36,7 +36,6 @@ def sessionurl(congress, session):
     return domain() + 'legislative/LIS/roll_call_lists/vote_menu_{}_{}.xml'.format(congress, session)
 
 def billinfourl(congress, number, what):
-    assert what in ['senate-bill', 'senate-resolution', 'house-concurrent-resolution']
     return 'https://www.congress.gov/bill/{}th-congress/{}/{}/all-info'.format(congress, what, number)
 
 # Request and parse ===================
@@ -194,7 +193,7 @@ def list_sessions(save=False, path="."):
     bs = read_soup(sessionlisturl(), 'html.parser')
     if bs == None:
         return None
-     
+
     # extract links and create table
     # must be a vote menu and text start with a year (as opposed to some text being detailed sessions)
     atags = bs.find_all("a", href=re.compile('vote_menu'), text=re.compile("^\d{4} "))
@@ -310,49 +309,81 @@ def fetch_all_since(d: date, save: bool = False, path="."):
     
 # --- This one takes a long time but get all we need # --------------
 
+billdict = {'senate-bill': 'S.', 'senate-resolution': 'S.Res.', \
+    'house-bill': 'H.R.', 'house-concurrent-resolution': 'H.Con.Res.'}
+
 def billinfo(congress, number, what):
+    """
+        extracts the details info about a bill type
+    """
+    assert what in ['senate-bill', 'senate-resolution', 'house-bill', 'house-concurrent-resolution']
+
     url = billinfourl(congress, number, what)
     bs = read_soup(url, 'html.parser')
 
-    bill = 'S.{}'.format(number) 
+    bill = '{}{}'.format(billdict[what], number) 
 
     # TO-DO!: obtain ALL titles not just one
     title = bs.find(class_='titles-row').p.text.strip()
 
     # overview table (sponsor, committee, latest)
-    overview = bs.find(class_='overview').table
-    overviewvals = list(overview.find_all('td'))
-    sponsorinfo = overviewvals[0].text.strip()
-    committee = overviewvals[1].text.strip()
-    latestaction = overviewvals[2].text.strip()
+    sponsor, committee, latestaction = '', '', ''
+    overviewtable = bs.find(class_='overview').table
+    for row in overviewtable.find_all('tr'):
+        
+        infotype = row.th.text
+        if 'Sponsor' in infotype:
+            sponsor_ = row.td.text.strip()
+            rematch = re.search('\w+\.[ ]+(.+) \[(\w+)-(\w{2})', sponsor_)
+            sponsor, party, state = [rematch.group(i) for i in range(1, 4)]
 
-    # parse the sponsor info form above
-    r = 'Sen\.[ ]+(.+) \[(\w+)-(\w{2})'
-    rematch = re.search(r, sponsorinfo)
-    sponsor, party, state = [rematch.group(i) for i in range(1, 4)]
+        elif 'Committee' in infotype and 'Reports' not in infotype:
+            committee = row.td.text.strip()
 
-    # now tracker information
-    tracker_banner = bs.find(class_='selected last').contents[0]
-    all_actions =  bs.find(id='allActions-content').table
-    all_actions_str = ''
-    rows = all_actions.tbody.find_all('tr')
-    for i, row in enumerate(rows):
-        d, c, a = list(row.find_all('td'))
-        all_actions_str += '{}\t{}\t{}'.format(d.text, c.text, a.text)
-        if i < len(rows) - 1:
-            all_actions_str += '\n'
+        elif 'Latest Action' in infotype:
+            latestaction_ = row.td.text.strip()        
+            latestaction = re.search('(.+)\.[^\.]*', latestaction_).group(1)
+
+    # now tracker and actions information
+    tracker_banner = bs.find(class_=re.compile('selected')).contents[0]
+    all_actions = ''
+    table = bs.find(id='allActions-content').table
+    if table is not None:        
+        rows = table.tbody.find_all('tr')
+        for i, row in enumerate(rows):
+            cells = row.find_all('td')
+            date_, chamber_, action_ = '', '', ''
+            for cell in cells:
+                if cell.has_attr('class') and 'date' in cell['class']:
+                    date_ = cell.text[:10]
+                elif cell.text in ['Senate', 'House']:
+                    chamber_ = cell.text
+                elif cell.has_attr('class') and 'actions' in cell['class']:
+                    action_ = cell.text   
+            if not (date_ == '' and chamber_ == '' and action_ == ''):
+                all_actions += '{}\t{}\t{}'.format(date_, chamber_, action_)
+                if i < len(rows) - 1:
+                    all_actions += '\n'
 
     # cosponsors
     cosponsorsinfo = bs.find(id='cosponsors-content')
-    entries = cosponsorsinfo.tbody.find_all('td', class_='actions')
-    cosponsors = []
-    for d in entries:
-        r = '\\nSen\. (.+) \[.*'
-        rematch = re.search(r, d.text)
-        c = rematch.group(1)
-        cosponsors.append(c)
+    table = cosponsorsinfo.tbody
+    cosponsors_ = []
+    if table is not None:
+        for d in table.find_all('td', class_='actions'):
+            r = '\\n\w+\. (.+) \[.*'
+            rematch = re.search(r, d.text)
+            c = rematch.group(1)
+            cosponsors_.append(c)
 
-    return bill, title, sponsor, party, state, all_actions_str, cosponsors
+    cosponsors = ''
+    num_cosponsors = len(cosponsors_)
+    for i in range(num_cosponsors):
+        cosponsors += cosponsors_[i]
+        if i < num_cosponsors - 1:
+            cosponsors += '; '
+
+    return bill, title, sponsor, party, state, tracker_banner, latestaction, committee, all_actions, cosponsors, url
 
 # restring = '(S.\d+).*- (.*)\.(\d+th.*)'
 # header = bs.h1.text

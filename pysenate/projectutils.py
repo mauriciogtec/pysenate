@@ -56,10 +56,3 @@ def update_data(configpath='config.yaml'):
         config['lastupdate'] = date.today()
         with open(configpath, 'w') as file:
             yaml.dump(config, file)
-
-
-path = 'tests'
-configpath = 'tests/config.yaml'
-
-import pysenate as pysen
-pysen.update_data(configpath)
