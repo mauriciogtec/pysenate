@@ -371,9 +371,10 @@ def billinfo(congress, number, what):
     cosponsors_ = []
     if table is not None:
         for d in table.find_all('td', class_='actions'):
-            r = '\\n\w+\. (.+) \[.*'
-            rematch = re.search(r, d.text)
-            c = rematch.group(1)
+            # r = '\\n\w+\. (.+) \[.*'
+            # rematch = re.search(r, d.text)
+            # c = rematch.group(1)
+            c = d.text.strip()
             cosponsors_.append(c)
 
     cosponsors = ''
