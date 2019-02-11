@@ -327,7 +327,7 @@ def billinfo(congress, number, what):
     title = bs.find(class_='titles-row').p.text.strip()
 
     # overview table (sponsor, committee, latest)
-    sponsor, committee, latestaction = '', '', ''
+    sponsor, committee, latestaction, last, first = '', '', '', '', ''
     overviewtable = bs.find(class_='overview').table
     for row in overviewtable.find_all('tr'):
         
@@ -373,9 +373,6 @@ def billinfo(congress, number, what):
     cosponsors_ = []
     if table is not None:
         for d in table.find_all('td', class_='actions'):
-            # r = '\\n\w+\. (.+) \[.*'
-            # rematch = re.search(r, d.text)
-            # c = rematch.group(1)
             c = d.text.strip()
             cosponsors_.append(c)
 
@@ -386,12 +383,4 @@ def billinfo(congress, number, what):
         if i < num_cosponsors - 1:
             cosponsors += '; '
 
-    return bill, title, sponsor, party, state, tracker_banner, latestaction, committee, all_actions, cosponsors, url
-
-# restring = '(S.\d+).*- (.*)\.(\d+th.*)'
-# header = bs.h1.text
-# reparse = re.search(restring, header)
-# bill, title = reparse.group(1), reparse.group(2)
-# table = bs.find(class_='overview').
-
-
+    return bill, title, sponsor, last, first, party, state, tracker_banner, latestaction, committee, all_actions, cosponsors, url
