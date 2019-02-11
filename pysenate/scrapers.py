@@ -336,6 +336,8 @@ def billinfo(congress, number, what):
             sponsor_ = row.td.text.strip()
             rematch = re.search('\w+\.[ ]+(.+) \[(\w+)-(\w{2})', sponsor_)
             sponsor, party, state = [rematch.group(i) for i in range(1, 4)]
+            parsesponsor = re.search('(\\w+), (\\w+).+', sponsor)
+            last, first = [parsesponsor.group(i).lower() for i in (1, 2)]
 
         elif 'Committee' in infotype and 'Reports' not in infotype:
             committee = row.td.text.strip()
